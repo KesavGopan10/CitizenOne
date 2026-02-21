@@ -69,6 +69,8 @@ The biggest barrier to AI form automation is privacy. **CitizenOne** solves this
 4. **Build for Production**:
    ```bash
    npm run build
+   or 
+   npx wxt build
    ```
    *The extension will be ready in the `dist/chrome-mv3` folder.*
 
