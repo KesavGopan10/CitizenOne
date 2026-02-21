@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Government Portal - Application for National Identity</title>
+    <style>
+        :root {
+            --gov-blue: #003366;
+            --gov-light-blue: #e7f3ff;
+            --gov-accent: #d4a017;
+            --bg-gray: #f4f4f4;
+            --border-gray: #cccccc;
+        }
+
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: var(--bg-gray);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border: 1px solid var(--border-gray);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        header {
+            background-color: var(--gov-blue);
+            color: white;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            border-bottom: 4px solid var(--gov-accent);
+        }
+
+        .crest {
+            width: 80px;
+            height: 80px;
+            background: #fff;
+            border-radius: 50%;
+            margin-right: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: var(--gov-blue);
+            font-size: 10px;
+            text-align: center;
+            border: 2px solid var(--gov-accent);
+        }
+
+        .header-text h1 {
+            margin: 0;
+            font-size: 24px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header-text p {
+            margin: 5px 0 0 0;
+            font-size: 14px;
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        form {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            border: 1px solid #eee;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .section-title {
+            background-color: var(--gov-light-blue);
+            color: var(--gov-blue);
+            padding: 8px 15px;
+            margin: -20px -20px 20px -20px;
+            font-weight: bold;
+            font-size: 16px;
+            border-bottom: 1px solid var(--border-gray);
+            text-transform: uppercase;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group.full-width {
+            grid-column: span 2;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        label .required {
+            color: red;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="date"],
+        input[type="tel"],
+        select,
+        textarea {
+            padding: 8px;
+            border: 1px solid #999;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus,
+        select:focus {
+            outline: 2px solid var(--gov-blue);
+            background-color: #fffdec;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 5px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+
+        .disclaimer {
+            font-size: 12px;
+            color: #666;
+            background: #fdfdfd;
+            padding: 15px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+
+        .actions {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+        }
+
+        button {
+            padding: 10px 25px;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-family: inherit;
+        }
+
+        .btn-submit {
+            background-color: var(--gov-blue);
+            color: white;
+            border: none;
+        }
+
+        .btn-submit:hover {
+            background-color: #002244;
+        }
+
+        .btn-cancel {
+            background: white;
+            border: 1px solid #999;
+        }
+
+        /* CitizenOne Visual Feedback styles (simulated) */
+        .citizen-one-filling {
+            outline: 2px solid #3b82f6 !important;
+            background-color: rgba(59, 130, 246, 0.1) !important;
+        }
+
+        @media (max-width: 600px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-group.full-width {
+                grid-column: span 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <div class="crest">DEPARTMENT<br>OF<br>CITIZENSHIP</div>
+            <div class="header-text">
+                <h1>National Identity Management System</h1>
+                <p>Ensuring Secure Identity for Every Citizen</p>
+            </div>
+        </header>
+
+        <form onsubmit="event.preventDefault(); alert('Application submitted successfully!');">
+            <div class="section">
+                <div class="section-title">Step 1: Personal Details</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="first_name">Full Name (First and Middle Name) <span
+                                class="required">*</span></label>
+                        <input type="text" id="first_name" name="first_name" required
+                            placeholder="Enter as per birth certificate">
+                    </div>
+                    <div class="form-group">
+                        <label for="last_name">Surname / Family Name <span class="required">*</span></label>
+                        <input type="text" id="last_name" name="last_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dob">Date of Birth <span class="required">*</span></label>
+                        <input type="date" id="dob" name="dob" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Gender <span class="required">*</span></label>
+                        <div class="radio-group" id="gender_group">
+                            <div class="radio-item">
+                                <input type="radio" id="male" name="gender" value="male">
+                                <label for="male">Male</label>
+                            </div>
+                            <div class="radio-item">
+                                <input type="radio" id="female" name="gender" value="female">
+                                <label for="female">Female</label>
+                            </div>
+                            <div class="radio-item">
+                                <input type="radio" id="other" name="gender" value="other">
+                                <label for="other">Other</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 2: Contact Information</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="email">Primary Email Address <span class="required">*</span></label>
+                        <input type="email" id="email" name="email" required placeholder="example@domain.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Mobile Number <span class="required">*</span></label>
+                        <input type="tel" id="params_phone" name="phone" required placeholder="+1 234 567 8900">
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 3: Residential Address</div>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="address_line_1">Permanent Address Street Line 1 <span
+                                class="required">*</span></label>
+                        <input type="text" id="address_line_1" name="address_1" required
+                            placeholder="House No, Street name, Locality">
+                    </div>
+                    <div class="form-group">
+                        <label for="city">City / Town <span class="required">*</span></label>
+                        <input type="text" id="city" name="city" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="state">State / Province <span class="required">*</span></label>
+                        <select id="state" name="state" required>
+                            <option value="">-- SELECT STATE --</option>
+                            <option value="CA">California</option>
+                            <option value="NY">New York</option>
+                            <option value="TX">Texas</option>
+                            <option value="FL">Florida</option>
+                            <option value="KA">Karnataka</option>
+                            <option value="MH">Maharashtra</option>
+                            <option value="DL">Delhi</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="zip_code">Postal / ZIP Code <span class="required">*</span></label>
+                        <input type="text" id="zip_code" name="postal_code" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="country">Country</label>
+                        <select id="country" name="country">
+                            <option value="US">United States</option>
+                            <option value="IN">India</option>
+                            <option value="UK">United Kingdom</option>
+                            <option value="CA">Canada</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Step 4: Identification</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="ssn">Social Security Number / National ID <span class="required">*</span></label>
+                        <input type="text" id="ssn" name="national_id" required placeholder="XXX-XX-XXXX">
+                    </div>
+                    <div class="form-group">
+                        <label for="occupation">Current Occupation</label>
+                        <input type="text" id="occupation" name="occupation">
+                    </div>
+                </div>
+            </div>
+
+            <div class="disclaimer">
+                <strong>Declaration:</strong> I hereby declare that the information provided above is true and correct
+                to the best of my knowledge and belief. In case any of the above information is found to be false or
+                untrue or misleading or misrepresenting, I am aware that I may be held liable for it.
+            </div>
+
+            <div class="actions">
+                <button type="button" class="btn-cancel">Save as Draft</button>
+                <button type="submit" class="btn-submit">Submit Application</button>
+            </div>
+        </form>
+    </div>
+
+</body>
+
+</html>
