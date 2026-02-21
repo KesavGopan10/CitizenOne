@@ -126,7 +126,7 @@ export function SettingsPage({ vault, masterPassword, onBack, onLock }: Props) {
     const handleSaveVault = async () => {
         setSaving(true);
         try {
-            await saveVault(masterPassword, editedVault);
+            await saveVault(editedVault, masterPassword);
             setStatusMsg('Vault saved!');
             setTimeout(() => setStatusMsg(''), 2000);
         } catch (err) {
@@ -199,8 +199,8 @@ export function SettingsPage({ vault, masterPassword, onBack, onLock }: Props) {
                                             id={`provider-${key}`}
                                             onClick={() => setSettings((s) => s ? { ...s, activeProvider: key } : s)}
                                             className={`p-2.5 rounded-xl text-left text-xs transition-all border ${settings.activeProvider === key
-                                                    ? 'bg-primary-600/20 border-primary-500/60 text-white'
-                                                    : 'bg-surface-700/40 border-surface-700 text-surface-400 hover:border-surface-600'
+                                                ? 'bg-primary-600/20 border-primary-500/60 text-white'
+                                                : 'bg-surface-700/40 border-surface-700 text-surface-400 hover:border-surface-600'
                                                 }`}
                                         >
                                             <div className="text-lg mb-1">{info.icon}</div>

@@ -15,10 +15,27 @@ export default function App() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        vaultExists().then((exists) => {
-            setView(exists ? 'unlock' : 'setup');
-            setLoading(false);
-        });
+        const init = async () => {
+            const exists = await vaultExists();
+            if (!exists) {
+                setView('setup');
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // Try unlocking via session
+                const { unlockVault } = await import('../lib/vault');
+                const v = await unlockVault();
+                setVault(v);
+                setView('dashboard');
+            } catch {
+                setView('unlock');
+            } finally {
+                setLoading(false);
+            }
+        };
+        init();
     }, []);
 
     const handleVaultReady = (unlockedVault: Vault, password: string) => {
@@ -27,7 +44,9 @@ export default function App() {
         setView('dashboard');
     };
 
-    const handleLock = () => {
+    const handleLock = async () => {
+        const { lockVault } = await import('../lib/vault');
+        await lockVault();
         setVault(null);
         setMasterPassword('');
         setView('unlock');

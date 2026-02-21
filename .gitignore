@@ -1,0 +1,15 @@
+.env
+node_modules
+**/dist
+.wxt
+.wxt/build
+.wxt/dev
+.wxt/types
+.wxt/temp
+.wxt/cache
+.wxt/logs
+.wxt/manifests
+.wxt/package.json
+.wxt/temp
+.wxt/types
+.wxt/vite.config.ts

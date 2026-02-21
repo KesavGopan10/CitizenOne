@@ -76,15 +76,11 @@ export function getSemanticMap(): SemanticMap {
 
     const fields: SemanticField[] = [];
     let bytesUsed = 0;
+    const handledRadios = new Set<string>();
 
     for (const el of elements) {
         if (!el.offsetParent && el.getAttribute('type') !== 'hidden') continue; // skip invisible
         if (bytesUsed >= MAX_TOKENS_BYTES) break;
-
-        const id =
-            el.id ||
-            el.getAttribute('name') ||
-            `field_${fields.length}`;
 
         const type =
             el.tagName === 'SELECT'
@@ -93,17 +89,33 @@ export function getSemanticMap(): SemanticMap {
                     ? 'textarea'
                     : (el as HTMLInputElement).type || 'text';
 
+        // Group radio buttons by name
+        if (type === 'radio') {
+            const name = el.getAttribute('name');
+            if (name && handledRadios.has(name)) continue;
+            if (name) handledRadios.add(name);
+        }
+
+        const id =
+            el.id ||
+            el.getAttribute('name') ||
+            `field_${fields.length}`;
+
         const label = resolveLabel(el);
-        if (!label) continue; // skip unlabeled fields — LLM can't map them
+        // If it's a radio group, we might want to find the fieldset label or similar
+        const groupLabel = type === 'radio' ? resolveGroupLabel(el) : '';
+        const finalLabel = (groupLabel || label || '').trim();
+
+        if (!finalLabel) continue;
 
         const field: SemanticField = {
             id,
             type,
-            label,
+            label: finalLabel,
         };
 
         const placeholder = (el as HTMLInputElement).placeholder;
-        if (placeholder && placeholder !== label) field.placeholder = placeholder;
+        if (placeholder && placeholder !== finalLabel) field.placeholder = placeholder;
 
         const name = el.getAttribute('name');
         if (name && name !== id) field.name = name;
@@ -112,13 +124,25 @@ export function getSemanticMap(): SemanticMap {
             const opts = Array.from((el as HTMLSelectElement).options)
                 .map((o) => o.text.trim())
                 .filter((t) => t && t.toLowerCase() !== 'select' && t !== '--');
-            if (opts.length) field.options = opts.slice(0, 10);
+            if (opts.length) field.options = opts.slice(0, 15); // Increased to 15
+        }
+
+        if (type === 'radio') {
+            const name = el.getAttribute('name');
+            if (name) {
+                const group = document.querySelectorAll(`input[type="radio"][name="${CSS.escape(name)}"]`);
+                const opts = Array.from(group).map(r => {
+                    const rLabel = resolveLabel(r as HTMLElement);
+                    return rLabel || (r as HTMLInputElement).value;
+                }).filter(Boolean);
+                if (opts.length) field.options = opts;
+            }
         }
 
         if ((el as HTMLInputElement).required) field.required = true;
 
         const context = getContext(el);
-        if (context && context !== label) field.context = context;
+        if (context && context !== finalLabel) field.context = context;
 
         fields.push(field);
         bytesUsed += JSON.stringify(field).length;
@@ -130,6 +154,28 @@ export function getSemanticMap(): SemanticMap {
         fields,
         totalFields: elements.length,
     };
+}
+
+/**
+ * Searches for a label for a group (e.g. for radios)
+ */
+function resolveGroupLabel(el: HTMLElement): string {
+    const fieldset = el.closest('fieldset');
+    if (fieldset) {
+        const legend = fieldset.querySelector('legend');
+        if (legend) return legend.textContent || '';
+    }
+
+    // Look for a preceding heading or bold text
+    const parent = el.parentElement;
+    if (parent) {
+        const textNodes = Array.from(parent.childNodes)
+            .filter(n => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+            .map(n => n.textContent?.trim());
+        if (textNodes.length) return textNodes[0] || '';
+    }
+
+    return '';
 }
 
 // ─── Field Locator ────────────────────────────────────────────────────────────
@@ -210,46 +256,57 @@ export function markFieldError(fieldId: string): void {
 
 export async function fillForm(mapping: FieldMapping, vault: Vault): Promise<FillResult[]> {
     const results: FillResult[] = [];
+    const failedFields: Array<{ fieldId: string, vaultKey: string }> = [];
 
+    // First Pass
     for (const [fieldId, vaultKey] of Object.entries(mapping)) {
         const value = getVaultValue(vault, vaultKey);
         const el = findElement(fieldId) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
 
-        if (!el) {
-            results.push({ fieldId, success: false, mappedKey: vaultKey, error: 'Element not found' });
-            continue;
-        }
-
-        if (!value) {
-            results.push({ fieldId, success: false, mappedKey: vaultKey, error: 'No vault value for key: ' + vaultKey });
-            continue;
-        }
+        if (!el || !value) continue;
 
         highlightField(fieldId);
-        await sleep(150); // Visual feedback delay
+        await sleep(100);
 
         try {
-            if (el.tagName === 'SELECT') {
-                fillSelect(el as HTMLSelectElement, value);
-            } else {
-                fillInput(el as HTMLInputElement | HTMLTextAreaElement, value);
-            }
+            await fillField(el, value);
             markFieldSuccess(fieldId);
             results.push({ fieldId, success: true, mappedKey: vaultKey });
         } catch (err) {
-            markFieldError(fieldId);
-            results.push({
-                fieldId,
-                success: false,
-                mappedKey: vaultKey,
-                error: err instanceof Error ? err.message : 'Unknown error',
-            });
+            failedFields.push({ fieldId, vaultKey });
         }
+    }
 
-        await sleep(100);
+    // Second Pass (Retry failed fields after a delay - handles dependencies like Country -> State)
+    if (failedFields.length > 0) {
+        await sleep(500); // Wait for potential dynamic loads
+        for (const { fieldId, vaultKey } of failedFields) {
+            const value = getVaultValue(vault, vaultKey);
+            const el = findElement(fieldId) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
+            if (!el || !value) continue;
+
+            try {
+                await fillField(el, value);
+                markFieldSuccess(fieldId);
+                results.push({ fieldId, success: true, mappedKey: vaultKey });
+            } catch (err) {
+                markFieldError(fieldId);
+                results.push({ fieldId, success: false, mappedKey: vaultKey, error: err instanceof Error ? err.message : 'Retry failed' });
+            }
+        }
     }
 
     return results;
+}
+
+async function fillField(el: HTMLElement, value: string): Promise<void> {
+    if (el.tagName === 'SELECT') {
+        fillSelect(el as HTMLSelectElement, value);
+    } else if ((el as HTMLInputElement).type === 'radio' || (el as HTMLInputElement).type === 'checkbox') {
+        fillCheckable(el as HTMLInputElement, value);
+    } else {
+        fillInput(el as HTMLInputElement | HTMLTextAreaElement, value);
+    }
 }
 
 function fillInput(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
@@ -268,37 +325,80 @@ function fillInput(el: HTMLInputElement | HTMLTextAreaElement, value: string): v
     }
 
     // Dispatch events to trigger React/Vue/Angular listeners
+    el.dispatchEvent(new Event('focus', { bubbles: true }));
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
+}
+
+function fillCheckable(el: HTMLInputElement, value: string): void {
+    const type = el.type;
+    const name = el.name;
+
+    if (type === 'radio' && name) {
+        const group = document.querySelectorAll<HTMLInputElement>(`input[name="${CSS.escape(name)}"]`);
+        for (const radio of group) {
+            const label = resolveLabel(radio).toLowerCase();
+            const rValue = radio.value.toLowerCase();
+            const target = value.toLowerCase();
+
+            if (label === target || rValue === target || label.includes(target) || target.includes(label)) {
+                radio.checked = true;
+                radio.dispatchEvent(new Event('change', { bubbles: true }));
+                radio.dispatchEvent(new Event('click', { bubbles: true }));
+                return;
+            }
+        }
+    } else if (type === 'checkbox') {
+        const label = resolveLabel(el).toLowerCase();
+        const target = value.toLowerCase();
+        const shouldBeChecked = target === 'true' || target === 'yes' || target === '1' || label.includes(target);
+
+        if (el.checked !== shouldBeChecked) {
+            el.checked = shouldBeChecked;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('click', { bubbles: true }));
+        }
+    }
 }
 
 function fillSelect(el: HTMLSelectElement, value: string): void {
-    // Try exact option value match
+    const targetValue = value.toLowerCase();
+
+    // Trigger mousedown/focus to help with some dynamic dropdowns
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    el.focus();
+
+    // 1. Try exact option value or text match
     for (const option of el.options) {
         if (
-            option.value.toLowerCase() === value.toLowerCase() ||
-            option.text.toLowerCase() === value.toLowerCase()
+            option.value.toLowerCase() === targetValue ||
+            option.text.toLowerCase() === targetValue
         ) {
             el.value = option.value;
-            el.dispatchEvent(new Event('change', { bubbles: true }));
+            triggerSelectEvents(el);
             return;
         }
     }
 
-    // Try partial match
+    // 2. Try partial match
     for (const option of el.options) {
-        if (
-            option.text.toLowerCase().includes(value.toLowerCase()) ||
-            value.toLowerCase().includes(option.text.toLowerCase())
-        ) {
+        const text = option.text.toLowerCase();
+        if (text.includes(targetValue) || targetValue.includes(text)) {
             el.value = option.value;
-            el.dispatchEvent(new Event('change', { bubbles: true }));
+            triggerSelectEvents(el);
             return;
         }
     }
 
     throw new Error(`No matching option for value: ${value}`);
+}
+
+function triggerSelectEvents(el: HTMLSelectElement): void {
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
 function sleep(ms: number): Promise<void> {

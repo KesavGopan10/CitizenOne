@@ -179,8 +179,63 @@ export function VaultSetup({ onVaultCreated }: Props) {
             {step === 'profile' && (
                 <div className="space-y-4 animate-slide-up">
                     <p className="text-xs text-surface-500 text-center">
-                        Fill in what you want auto-filled. All empty fields are skipped.
+                        Fill in what you want auto-filled. You can also scan a document to pre-fill.
                     </p>
+
+                    {/* Document Intake Card */}
+                    <div className="card border-dashed border-primary-500/50 bg-primary-500/5 p-4 text-center">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-primary-400">📄 Smart Scan</p>
+                            {loading && <span className="w-3 h-3 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />}
+                        </div>
+                        <p className="text-[10px] text-surface-500 mb-3">Upload an ID or document to extract your information instantly.</p>
+                        <label className="btn-secondary py-2 cursor-pointer w-full inline-block">
+                            <span>📁 Upload Document</span>
+                            <input
+                                type="file"
+                                className="hidden"
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setLoading(true);
+                                    setError('');
+                                    try {
+                                        const reader = new FileReader();
+                                        const base64Promise = new Promise<string>((resolve) => {
+                                            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                                            reader.readAsDataURL(file);
+                                        });
+                                        const fileBase64 = await base64Promise;
+
+                                        const response = await new Promise<{ success: boolean; data?: any; error?: string }>((resolve) => {
+                                            chrome.runtime.sendMessage({
+                                                type: 'EXTRACT_DOCUMENT',
+                                                fileBase64,
+                                                fileType: file.type,
+                                                vaultKeys: fields.map(f => f.key)
+                                            }, resolve);
+                                        });
+
+                                        if (response.success && response.data) {
+                                            const result = response.data;
+                                            setFields(prev => prev.map(f => ({
+                                                ...f,
+                                                value: result[f.key] || f.value
+                                            })));
+                                        } else {
+                                            throw new Error(response.error || 'Extraction failed');
+                                        }
+                                    } catch (err) {
+                                        setError(err instanceof Error ? err.message : 'Failed to extract data');
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                                accept="image/*,.pdf"
+                                disabled={loading}
+                            />
+                        </label>
+                    </div>
 
                     {(Object.entries(categorized) as [string, typeof fields][]).map(([cat, catFields]) => (
                         <div key={cat} className="card space-y-3">

@@ -4,13 +4,16 @@
 // in the extension context.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import CryptoJS from 'crypto-js';
+import * as CryptoJS from 'crypto-js';
 import type { Vault, VaultField } from '../types';
 
 const VAULT_STORAGE_KEY = 'citizen_one_vault_encrypted';
 const VAULT_SALT_KEY = 'citizen_one_vault_salt';
 const VAULT_CHECK_KEY = 'citizen_one_vault_check';
+const VAULT_SESSION_KEY = 'citizen_one_session_key';
+const VAULT_SESSION_EXPIRY = 'citizen_one_session_expiry';
 const CHECK_PLAINTEXT = 'CITIZEN_ONE_VAULT_OK';
+const SESSION_DURATION_MS = 5 * 60_000; // 5 minutes
 
 // ─── Key Derivation ──────────────────────────────────────────────────────────
 
@@ -25,6 +28,49 @@ function deriveKey(password: string, salt: string): string {
 
 function generateSalt(): string {
     return CryptoJS.lib.WordArray.random(128 / 8).toString();
+}
+
+// ─── Session Management ─────────────────────────────────────────────────────
+
+async function setSession(key: string): Promise<void> {
+    if (chrome.storage.session) {
+        await chrome.storage.session.set({
+            [VAULT_SESSION_KEY]: key,
+            [VAULT_SESSION_EXPIRY]: Date.now() + SESSION_DURATION_MS,
+        });
+    }
+}
+
+export async function getSessionKey(): Promise<string | null> {
+    if (!chrome.storage.session) return null;
+
+    const result = await chrome.storage.session.get([VAULT_SESSION_KEY, VAULT_SESSION_EXPIRY]);
+    const expiry = result[VAULT_SESSION_EXPIRY];
+
+    if (expiry && Date.now() > expiry) {
+        await lockVault();
+        return null;
+    }
+
+    // Refresh expiry on access
+    if (expiry) {
+        await chrome.storage.session.set({
+            [VAULT_SESSION_EXPIRY]: Date.now() + SESSION_DURATION_MS,
+        });
+    }
+
+    return result[VAULT_SESSION_KEY] || null;
+}
+
+export async function lockVault(): Promise<void> {
+    if (chrome.storage.session) {
+        await chrome.storage.session.remove([VAULT_SESSION_KEY, VAULT_SESSION_EXPIRY]);
+    }
+}
+
+export async function isLocked(): Promise<boolean> {
+    const key = await getSessionKey();
+    return !key;
 }
 
 // ─── Encrypt / Decrypt ───────────────────────────────────────────────────────
@@ -94,13 +140,17 @@ export async function createVault(
         [VAULT_STORAGE_KEY]: encryptedVault,
         [VAULT_CHECK_KEY]: encryptedCheck,
     });
+
+    await setSession(key);
 }
 
 /**
  * Unlocks the vault and returns the decrypted Vault object.
  * Throws if the password is wrong.
  */
-export async function unlockVault(masterPassword: string): Promise<Vault> {
+export async function unlockVault(masterPassword?: string): Promise<Vault> {
+    const sessionKey = await getSessionKey();
+
     const result = await storageGet<string>([
         VAULT_SALT_KEY,
         VAULT_STORAGE_KEY,
@@ -115,7 +165,15 @@ export async function unlockVault(masterPassword: string): Promise<Vault> {
         throw new Error('No vault found. Please create one first.');
     }
 
-    const key = deriveKey(masterPassword, salt);
+    let key: string;
+
+    if (sessionKey) {
+        key = sessionKey;
+    } else if (masterPassword) {
+        key = deriveKey(masterPassword, salt);
+    } else {
+        throw new Error('Vault is locked. Password required.');
+    }
 
     // Verify password before decrypting vault
     let checkPlain: string;
@@ -129,6 +187,11 @@ export async function unlockVault(masterPassword: string): Promise<Vault> {
         throw new Error('Incorrect master password.');
     }
 
+    // Store in session if it was a fresh unlock
+    if (!sessionKey) {
+        await setSession(key);
+    }
+
     const vaultJson = decrypt(encryptedVault, key);
     return JSON.parse(vaultJson) as Vault;
 }
@@ -137,9 +200,10 @@ export async function unlockVault(masterPassword: string): Promise<Vault> {
  * Saves the updated vault back to storage (requires re-encrypting).
  */
 export async function saveVault(
-    masterPassword: string,
     vault: Vault,
+    masterPassword?: string,
 ): Promise<void> {
+    const sessionKey = await getSessionKey();
     const result = await storageGet<string>([VAULT_SALT_KEY]);
     const salt = result[VAULT_SALT_KEY];
 
@@ -147,7 +211,15 @@ export async function saveVault(
         throw new Error('No vault found. Create one first.');
     }
 
-    const key = deriveKey(masterPassword, salt);
+    let key: string;
+    if (sessionKey) {
+        key = sessionKey;
+    } else if (masterPassword) {
+        key = deriveKey(masterPassword, salt);
+    } else {
+        throw new Error('Vault is locked. Password required to save.');
+    }
+
     vault.updatedAt = Date.now();
     const encryptedVault = encrypt(JSON.stringify(vault), key);
 
@@ -169,6 +241,7 @@ export async function changeMasterPassword(
  * Wipes the vault entirely from storage.
  */
 export async function destroyVault(): Promise<void> {
+    await lockVault();
     return new Promise((resolve, reject) => {
         chrome.storage.local.remove(
             [VAULT_SALT_KEY, VAULT_STORAGE_KEY, VAULT_CHECK_KEY],

@@ -128,6 +128,51 @@ async function handleMessage(
                 break;
             }
 
+            case 'VOICE_QUERY': {
+                const { prompt } = message as { type: string; prompt: string };
+                const settings = await getSettings();
+                const activeProviderConfig = settings.providers[settings.activeProvider];
+
+                // Simplified AI call for voice/text reasoning
+                const url = activeProviderConfig.baseUrl
+                    ? `${activeProviderConfig.baseUrl}/chat/completions`
+                    : `https://generativelanguage.googleapis.com/v1beta/models/${activeProviderConfig.model || 'gemini-1.5-flash'}:generateContent?key=${activeProviderConfig.apiKey}`;
+
+                let aiResponse: string;
+
+                if (settings.activeProvider === 'gemini') {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+                        })
+                    });
+                    const json = await res.json();
+                    aiResponse = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'No response';
+                } else {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${activeProviderConfig.apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: activeProviderConfig.model,
+                            messages: [{ role: 'user', content: prompt }],
+                            temperature: 0.7,
+                            max_tokens: 512
+                        })
+                    });
+                    const json = await res.json();
+                    aiResponse = json?.choices?.[0]?.message?.content ?? 'No response';
+                }
+
+                sendResponse({ success: true, data: aiResponse });
+                break;
+            }
+
             default:
                 sendResponse({ success: false, error: `Unknown message type: ${message.type}` });
         }
